@@ -5,6 +5,7 @@ public sealed class VideoOperationContext
     private readonly List<string> _preInputArguments = new();
     private readonly List<string> _postInputArguments = new();
     private readonly List<string> _videoFilters = new();
+    private string? _inputPathOverride;
 
     public IReadOnlyList<string> PreInputArguments => _preInputArguments;
 
@@ -32,6 +33,16 @@ public sealed class VideoOperationContext
         _videoFilters.Add(filter);
     }
 
+    public void OverrideInputPath(string inputPath)
+    {
+        if (string.IsNullOrWhiteSpace(inputPath))
+        {
+            throw new ArgumentException("Input path override is required.", nameof(inputPath));
+        }
+
+        _inputPathOverride = inputPath;
+    }
+
     public IReadOnlyList<string> BuildArguments(string inputPath, string outputPath)
     {
         if (string.IsNullOrWhiteSpace(inputPath))
@@ -47,7 +58,7 @@ public sealed class VideoOperationContext
         var args = new List<string>();
         args.AddRange(_preInputArguments);
         args.Add("-i");
-        args.Add(inputPath);
+        args.Add(_inputPathOverride ?? inputPath);
         args.AddRange(_postInputArguments);
 
         if (_videoFilters.Count > 0)
