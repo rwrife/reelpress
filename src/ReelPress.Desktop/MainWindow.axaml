@@ -1,0 +1,240 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:ReelPress.Desktop.ViewModels"
+        x:Class="ReelPress.Desktop.MainWindow"
+        x:Name="RootWindow"
+        Width="1360"
+        Height="860"
+        MinWidth="1080"
+        MinHeight="720"
+        Title="ReelPress — Pipeline Builder"
+        mc:Ignorable="d"
+        d:DesignWidth="1360"
+        d:DesignHeight="860">
+
+  <ScrollViewer>
+    <Grid Margin="16" ColumnDefinitions="*,*" RowDefinitions="Auto,*">
+      <Border Grid.ColumnSpan="2" Padding="10" CornerRadius="8" Background="#20232a" Margin="0,0,0,12">
+        <TextBlock Text="Drag files/folders into the window, stack operations, then run the batch queue."
+                   Foreground="#f4f4f4"
+                   FontWeight="SemiBold" />
+      </Border>
+
+      <StackPanel Grid.Row="1" Grid.Column="0" Spacing="12" Margin="0,0,6,0">
+        <Border Padding="10" BorderThickness="1" BorderBrush="#404040" CornerRadius="6">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Intake &amp; Queue" FontSize="16" FontWeight="SemiBold" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBox x:Name="PathInputBox"
+                       Width="420"
+                       Watermark="Paste local video file/folder path" />
+              <Button Content="Add Path"
+                      Command="{Binding AddPathCommand}"
+                      CommandParameter="{Binding Text, ElementName=PathInputBox}" />
+              <Button Content="Remove Selected"
+                      Command="{Binding RemoveSelectedJobCommand}" />
+            </StackPanel>
+
+            <ListBox ItemsSource="{Binding Jobs}"
+                     SelectedItem="{Binding SelectedJob}"
+                     Height="250">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Border Padding="6" Margin="0,0,0,6" BorderThickness="1" BorderBrush="#404040" CornerRadius="4">
+                    <StackPanel Spacing="4">
+                      <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Status}" FontSize="11" Opacity="0.85" />
+                      <ProgressBar Minimum="0"
+                                   Maximum="100"
+                                   Value="{Binding ProgressPercent, FallbackValue=0}" />
+                      <TextBlock Text="{Binding Message}" FontSize="11" TextWrapping="Wrap" Opacity="0.8" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Run Queue" Command="{Binding RunQueueCommand}" />
+              <Button Content="Cancel" Command="{Binding CancelRunCommand}" />
+              <ProgressBar Minimum="0" Maximum="100" Value="{Binding OverallProgress}" Width="200" />
+            </StackPanel>
+            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Padding="10" BorderThickness="1" BorderBrush="#404040" CornerRadius="6">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Pipeline Builder" FontSize="16" FontWeight="SemiBold" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ComboBox Width="180"
+                        ItemsSource="{Binding StepTypeOptions}"
+                        SelectedItem="{Binding NewStepType}" />
+              <Button Content="Add Step" Command="{Binding AddStepCommand}" />
+              <Button Content="Remove Step" Command="{Binding RemoveSelectedStepCommand}" />
+              <Button Content="↑" Width="40" Command="{Binding MoveStepUpCommand}" />
+              <Button Content="↓" Width="40" Command="{Binding MoveStepDownCommand}" />
+            </StackPanel>
+
+            <ListBox ItemsSource="{Binding PipelineSteps}"
+                     SelectedItem="{Binding SelectedStep}"
+                     Height="220">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <Border Padding="6" Margin="0,0,0,4" BorderThickness="1" BorderBrush="#404040" CornerRadius="4">
+                    <StackPanel>
+                      <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Description}" FontSize="11" Opacity="0.8" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <StackPanel Grid.Row="1" Grid.Column="1" Spacing="12" Margin="6,0,0,0">
+        <Border Padding="10" BorderThickness="1" BorderBrush="#404040" CornerRadius="6">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Selected Step Settings (per-operation panel)" FontSize="16" FontWeight="SemiBold" />
+
+            <ContentControl Content="{Binding SelectedStep}">
+              <ContentControl.DataTemplates>
+                <DataTemplate DataType="vm:ResizeStepViewModel">
+                  <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Preset" Width="120" />
+                      <ComboBox Width="180"
+                                ItemsSource="{Binding #RootWindow.DataContext.ResizePresetOptions}"
+                                SelectedItem="{Binding Preset}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Mode" Width="120" />
+                      <ComboBox Width="180"
+                                ItemsSource="{Binding #RootWindow.DataContext.ResizeModeOptions}"
+                                SelectedItem="{Binding Mode}" />
+                    </StackPanel>
+                    <CheckBox Content="Allow upscale"
+                              IsChecked="{Binding AllowUpscale}" />
+                  </StackPanel>
+                </DataTemplate>
+
+                <DataTemplate DataType="vm:CompressStepViewModel">
+                  <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Mode" Width="120" />
+                      <ComboBox Width="220"
+                                ItemsSource="{Binding #RootWindow.DataContext.CompressionModeOptions}"
+                                SelectedItem="{Binding Mode}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="CRF" Width="120" />
+                      <TextBox Width="80" Text="{Binding Crf}" />
+                      <TextBlock Text="Target MB" Width="90" />
+                      <TextBox Width="80" Text="{Binding TargetSizeMb}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Audio kbps" Width="120" />
+                      <TextBox Width="80" Text="{Binding AudioBitrateKbps}" />
+                      <TextBlock Text="Codec" Width="50" />
+                      <ComboBox Width="160"
+                                ItemsSource="{Binding #RootWindow.DataContext.VideoCodecOptions}"
+                                SelectedItem="{Binding VideoCodec}" />
+                    </StackPanel>
+                  </StackPanel>
+                </DataTemplate>
+
+                <DataTemplate DataType="vm:ConvertStepViewModel">
+                  <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Container" Width="120" />
+                      <ComboBox Width="150"
+                                ItemsSource="{Binding #RootWindow.DataContext.VideoContainerOptions}"
+                                SelectedItem="{Binding Container}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Video codec" Width="120" />
+                      <ComboBox Width="150"
+                                ItemsSource="{Binding #RootWindow.DataContext.VideoCodecOptions}"
+                                SelectedItem="{Binding VideoCodec}" />
+                      <TextBlock Text="Audio codec" Width="100" />
+                      <ComboBox Width="150"
+                                ItemsSource="{Binding #RootWindow.DataContext.AudioCodecOptions}"
+                                SelectedItem="{Binding AudioCodec}" />
+                    </StackPanel>
+                  </StackPanel>
+                </DataTemplate>
+
+                <DataTemplate DataType="vm:TrimStepViewModel">
+                  <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Start" Width="120" />
+                      <TextBox Width="120" Text="{Binding Start}" />
+                      <TextBlock Text="End" Width="60" />
+                      <TextBox Width="120" Text="{Binding End}" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="Mode" Width="120" />
+                      <ComboBox Width="220"
+                                ItemsSource="{Binding #RootWindow.DataContext.TrimModeOptions}"
+                                SelectedItem="{Binding Mode}" />
+                    </StackPanel>
+                  </StackPanel>
+                </DataTemplate>
+              </ContentControl.DataTemplates>
+            </ContentControl>
+          </StackPanel>
+        </Border>
+
+        <Border Padding="10" BorderThickness="1" BorderBrush="#404040" CornerRadius="6">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Output &amp; Runtime Settings" FontSize="16" FontWeight="SemiBold" />
+            <CheckBox Content="Write outputs next to source files"
+                      IsChecked="{Binding WriteInPlace}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Output folder" Width="120" />
+              <TextBox Width="360" Text="{Binding OutputDirectory}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Max concurrency" Width="120" />
+              <TextBox Width="60" Text="{Binding MaxConcurrency}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <Border Padding="10" BorderThickness="1" BorderBrush="#404040" CornerRadius="6">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Live Preview + Estimate" FontSize="16" FontWeight="SemiBold" />
+            <Grid ColumnDefinitions="*,*">
+              <StackPanel Grid.Column="0" Margin="0,0,6,0" Spacing="4">
+                <TextBlock Text="Before" FontWeight="SemiBold" />
+                <Border BorderThickness="1" BorderBrush="#404040" Height="190" CornerRadius="4">
+                  <Image Source="{Binding BeforePreviewUri}" Stretch="Uniform" />
+                </Border>
+              </StackPanel>
+              <StackPanel Grid.Column="1" Margin="6,0,0,0" Spacing="4">
+                <TextBlock Text="After" FontWeight="SemiBold" />
+                <Border BorderThickness="1" BorderBrush="#404040" Height="190" CornerRadius="4">
+                  <Image Source="{Binding AfterPreviewUri}" Stretch="Uniform" />
+                </Border>
+              </StackPanel>
+            </Grid>
+            <TextBlock Text="{Binding EstimateText}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Padding="10" BorderThickness="1" BorderBrush="#404040" CornerRadius="6">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Batch Results Summary" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding ResultSummary}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </Grid>
+  </ScrollViewer>
+</Window>
