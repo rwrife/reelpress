@@ -147,14 +147,134 @@ public sealed class VideoOperationsTests
         Assert.Contains(errors, error => error.Contains("Upscale is disabled", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static IReadOnlyList<string> BuildArgs(MediaInfo mediaInfo, IVideoOperation operation)
+    [Fact]
+    public void ExtractAudioOperation_BuildsMp3Arguments()
+    {
+        var media = CreateSampleMediaInfo();
+        var operation = new ExtractAudioOperation(AudioExtractionFormat.Mp3, bitrateKbps: 160);
+
+        var args = BuildArgs(media, operation, outputPath: "output.mp3");
+
+        AssertContainsSequence(args, "-map", "0:a:0");
+        AssertContainsSequence(args, "-vn", "-c:a");
+        AssertContainsSequence(args, "-c:a", "libmp3lame");
+        AssertContainsSequence(args, "-b:a", "160k");
+    }
+
+    [Fact]
+    public void MuteOperation_DropsAudioAndCopiesVideo()
+    {
+        var media = CreateSampleMediaInfo();
+        var operation = new MuteOperation();
+
+        var args = BuildArgs(media, operation);
+
+        AssertContainsSequence(args, "-an", "-c:v");
+        AssertContainsSequence(args, "-c:v", "copy");
+    }
+
+    [Fact]
+    public void ExtractFramesOperation_IntervalMode_BuildsFpsFilterAndPngEncoder()
+    {
+        var media = CreateSampleMediaInfo();
+        var operation = new ExtractFramesOperation(everyInterval: TimeSpan.FromSeconds(2), format: FrameImageFormat.Png);
+
+        var args = BuildArgs(media, operation, outputPath: "frame-%03d.png");
+
+        AssertContainsSequence(args, "-vf", "fps=0.5");
+        AssertContainsSequence(args, "-vsync", "vfr");
+        AssertContainsSequence(args, "-c:v", "png");
+    }
+
+    [Fact]
+    public void ExtractFramesOperation_SingleTimestampMode_ExtractsExactlyOneFrame()
+    {
+        var media = CreateSampleMediaInfo();
+        var operation = new ExtractFramesOperation(atTimestamp: TimeSpan.FromSeconds(3), format: FrameImageFormat.Jpeg);
+
+        var args = BuildArgs(media, operation, outputPath: "still.jpg");
+
+        AssertContainsSequence(args, "-ss", "00:00:03.000");
+        AssertContainsSequence(args, "-frames:v", "1");
+        AssertContainsSequence(args, "-c:v", "mjpeg");
+    }
+
+    [Fact]
+    public void ExportAnimationOperation_Gif_UsesPalettegenAndPaletteuse()
+    {
+        var media = CreateSampleMediaInfo();
+        var operation = new ExportAnimationOperation(
+            format: AnimatedImageFormat.Gif,
+            start: TimeSpan.FromSeconds(1),
+            end: TimeSpan.FromSeconds(4),
+            fps: 12,
+            width: 360);
+
+        var args = BuildArgs(media, operation, outputPath: "clip.gif");
+
+        AssertContainsSequence(args, "-f", "gif");
+        var filterComplexIndex = FindIndex(args, "-filter_complex");
+        Assert.True(filterComplexIndex >= 0);
+        var filterComplex = args[filterComplexIndex + 1];
+        Assert.Contains("palettegen", filterComplex, StringComparison.Ordinal);
+        Assert.Contains("paletteuse", filterComplex, StringComparison.Ordinal);
+        Assert.Contains("fps=12", filterComplex, StringComparison.Ordinal);
+        Assert.Contains("scale=360:-1", filterComplex, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MergeOperation_AutoMode_UsesConcatDemuxerWhenInputsAreCompatible()
+    {
+        var media = CreateSampleMediaInfo();
+        var mediaInfos = new[]
+        {
+            media,
+            CreateSampleMediaInfo()
+        };
+
+        var operation = new MergeOperation(
+            inputPaths: new[] { "input.mp4", "clip-2.mp4" },
+            mode: MergeMode.Auto,
+            inputMediaInfos: mediaInfos);
+
+        var args = BuildArgs(media, operation, outputPath: "merged.mp4");
+
+        AssertContainsSequence(args, "-f", "concat");
+        AssertContainsSequence(args, "-safe", "0");
+        AssertContainsSequence(args, "-c", "copy");
+    }
+
+    [Fact]
+    public void MergeOperation_AutoMode_FallsBackToReencodeWhenInputsDiffer()
+    {
+        var media = CreateSampleMediaInfo();
+        var mediaInfos = new[]
+        {
+            media,
+            CreateSampleMediaInfo(width: 1280, height: 720)
+        };
+
+        var operation = new MergeOperation(
+            inputPaths: new[] { "input.mp4", "clip-2.mp4" },
+            mode: MergeMode.Auto,
+            inputMediaInfos: mediaInfos);
+
+        var args = BuildArgs(media, operation, outputPath: "merged.mp4");
+
+        AssertContainsSequence(args, "-i", "input.mp4");
+        Assert.Contains(args, token => token.Contains("concat=n=2", StringComparison.Ordinal));
+        AssertContainsSequence(args, "-c:v", "libx264");
+        AssertContainsSequence(args, "-c:a", "aac");
+    }
+
+    private static IReadOnlyList<string> BuildArgs(MediaInfo mediaInfo, IVideoOperation operation, string inputPath = "input.mp4", string outputPath = "output.mp4")
     {
         var errors = operation.Validate(mediaInfo);
         Assert.Empty(errors);
 
         var context = new VideoOperationContext();
         operation.Apply(mediaInfo, context);
-        return context.BuildArguments("input.mp4", "output.mp4");
+        return context.BuildArguments(inputPath, outputPath);
     }
 
     private static MediaInfo CreateSampleMediaInfo(
