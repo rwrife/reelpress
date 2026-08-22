@@ -71,6 +71,14 @@
             <TextBlock Text="Pipeline Builder" FontSize="16" FontWeight="SemiBold" />
 
             <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBox Width="300"
+                       Text="{Binding RecipePath}"
+                       Watermark="Preset name or JSON recipe path" />
+              <Button Content="Load Recipe" Command="{Binding LoadRecipeCommand}" />
+              <Button Content="Save Recipe" Command="{Binding SaveRecipeCommand}" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
               <ComboBox Width="180"
                         ItemsSource="{Binding StepTypeOptions}"
                         SelectedItem="{Binding NewStepType}" />

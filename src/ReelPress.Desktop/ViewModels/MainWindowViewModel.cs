@@ -14,6 +14,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly IFfmpegEngine _ffmpegEngine;
     private readonly IMediaProbe _mediaProbe;
     private readonly PipelineRunner _pipelineRunner;
+    private readonly IRecipeStore _recipeStore;
 
     private CancellationTokenSource? _runCts;
     private QueuedJobViewModel? _selectedJob;
@@ -27,6 +28,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     private int _maxConcurrency = 2;
     private double _overallProgress;
     private string _estimateText = "Select a file to see preview + estimated output size.";
+    private string _recipePath = "default";
     private Uri? _beforePreviewUri;
     private Uri? _afterPreviewUri;
 
@@ -44,6 +46,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
         _mediaProbe = new MediaProbe(_ffmpegEngine);
         _pipelineRunner = new PipelineRunner(_ffmpegEngine, _mediaProbe);
+        _recipeStore = new JsonRecipeStore();
 
         AddPathCommand = new RelayCommand<string?>(AddPathFromText);
         RemoveSelectedJobCommand = new RelayCommand(RemoveSelectedJob);
@@ -53,6 +56,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         MoveStepDownCommand = new RelayCommand(MoveStepDown);
         RunQueueCommand = new AsyncRelayCommand(RunQueueAsync);
         CancelRunCommand = new RelayCommand(CancelRun);
+        SaveRecipeCommand = new AsyncRelayCommand(SaveRecipeAsync);
+        LoadRecipeCommand = new AsyncRelayCommand(LoadRecipeAsync);
 
         // Starter defaults for common "resize + compress + convert" workflows.
         PipelineSteps.Add(new ResizeStepViewModel());
@@ -102,6 +107,10 @@ public sealed class MainWindowViewModel : ViewModelBase
     public IAsyncRelayCommand RunQueueCommand { get; }
 
     public IRelayCommand CancelRunCommand { get; }
+
+    public IAsyncRelayCommand SaveRecipeCommand { get; }
+
+    public IAsyncRelayCommand LoadRecipeCommand { get; }
 
     public QueuedJobViewModel? SelectedJob
     {
@@ -173,6 +182,12 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         get => _estimateText;
         set => SetProperty(ref _estimateText, value);
+    }
+
+    public string RecipePath
+    {
+        get => _recipePath;
+        set => SetProperty(ref _recipePath, value);
     }
 
     public Uri? BeforePreviewUri
@@ -380,7 +395,9 @@ public sealed class MainWindowViewModel : ViewModelBase
 
         try
         {
-            var operations = BuildOperations();
+            var operations = await RecipeRuntime
+                .PrepareOperationsAsync(BuildOperations(), _mediaProbe, _runCts.Token)
+                .ConfigureAwait(true);
             var batchJobs = Jobs
                 .Select(job => new BatchJob(
                     InputPath: job.InputPath,
@@ -468,6 +485,50 @@ public sealed class MainWindowViewModel : ViewModelBase
     private void CancelRun()
     {
         _runCts?.Cancel();
+    }
+
+    private async Task SaveRecipeAsync()
+    {
+        if (PipelineSteps.Count == 0)
+        {
+            StatusMessage = "Add at least one pipeline step before saving a recipe.";
+            return;
+        }
+
+        try
+        {
+            var recipe = RecipePipelineMapper.ToRecipe(
+                Path.GetFileNameWithoutExtension(RecipePath),
+                PipelineSteps);
+            await _recipeStore.SaveAsync(RecipePath, recipe).ConfigureAwait(true);
+            StatusMessage = $"Saved recipe '{RecipePath}'.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not save recipe: {ex.Message}";
+        }
+    }
+
+    private async Task LoadRecipeAsync()
+    {
+        try
+        {
+            var recipe = await _recipeStore.LoadAsync(RecipePath).ConfigureAwait(true);
+            var steps = RecipePipelineMapper.ToViewModels(recipe);
+            PipelineSteps.Clear();
+            foreach (var step in steps)
+            {
+                PipelineSteps.Add(step);
+            }
+
+            SelectedStep = PipelineSteps.FirstOrDefault();
+            StatusMessage = $"Loaded recipe '{RecipePath}'.";
+            await RefreshSelectedJobDetailsAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not load recipe: {ex.Message}";
+        }
     }
 
     private IReadOnlyList<IVideoOperation> BuildOperations() =>
