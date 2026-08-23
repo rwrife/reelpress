@@ -62,8 +62,8 @@ optional local-AI assistance that never leaves the machine.
 4. **M4 — Desktop UI:** Avalonia shell, drag-drop intake, pipeline builder, batch queue,
    live before/after preview + estimated output size, progress/cancel.
 5. **M5 — CLI + recipes:** `reelpress` verbs, JSON recipe load/save, presets.
-6. **M6 — Optional local-AI:** `IVideoAiService` smart thumbnail + auto-title, probe +
-   graceful fallback, off by default, local-only.
+6. **M6 — Optional local-AI (complete):** `IVideoAiService` smart thumbnail + auto-title,
+   probe + graceful fallback, off by default, local-only.
 7. **M7 — Packaging & CI:** Windows portable zip + MSIX, macOS universal `.app`/`.dmg`,
    GitHub Actions matrix (windows-latest + macos-latest), bundle ffmpeg runtimes.
 

@@ -15,6 +15,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     private readonly IMediaProbe _mediaProbe;
     private readonly PipelineRunner _pipelineRunner;
     private readonly IRecipeStore _recipeStore;
+    private readonly IVideoAiService _videoAiService;
+    private readonly SemaphoreSlim _aiSaveLock = new(1, 1);
+    private readonly Task _aiInitializationTask;
 
     private CancellationTokenSource? _runCts;
     private QueuedJobViewModel? _selectedJob;
@@ -31,6 +34,15 @@ public sealed class MainWindowViewModel : ViewModelBase
     private string _recipePath = "default";
     private Uri? _beforePreviewUri;
     private Uri? _afterPreviewUri;
+    private bool _localAiEnabled;
+    private string _localAiEndpoint = "http://localhost:11434";
+    private string _localAiVisionModel = "minicpm-v";
+    private string _localAiTextModel = "llama3.2";
+    private string _localAiStatus = "Local AI is off.";
+    private string _suggestedTitle = string.Empty;
+    private bool _loadingAiSettings = true;
+    private bool _applyingAiSettings;
+    private int _aiSettingsVersion;
 
     public MainWindowViewModel()
     {
@@ -47,6 +59,10 @@ public sealed class MainWindowViewModel : ViewModelBase
         _mediaProbe = new MediaProbe(_ffmpegEngine);
         _pipelineRunner = new PipelineRunner(_ffmpegEngine, _mediaProbe);
         _recipeStore = new JsonRecipeStore();
+        _videoAiService = new VideoAiService(
+            new HttpClientHandler(),
+            new JsonVideoAiSettingsStore(),
+            TimeSpan.FromSeconds(10));
 
         AddPathCommand = new RelayCommand<string?>(AddPathFromText);
         RemoveSelectedJobCommand = new RelayCommand(RemoveSelectedJob);
@@ -58,12 +74,16 @@ public sealed class MainWindowViewModel : ViewModelBase
         CancelRunCommand = new RelayCommand(CancelRun);
         SaveRecipeCommand = new AsyncRelayCommand(SaveRecipeAsync);
         LoadRecipeCommand = new AsyncRelayCommand(LoadRecipeAsync);
+        ProbeLocalAiCommand = new AsyncRelayCommand(ProbeLocalAiAsync);
+        SelectSmartThumbnailCommand = new AsyncRelayCommand(SelectSmartThumbnailAsync);
+        SuggestTitleCommand = new AsyncRelayCommand(SuggestTitleAsync);
 
         // Starter defaults for common "resize + compress + convert" workflows.
         PipelineSteps.Add(new ResizeStepViewModel());
         PipelineSteps.Add(new CompressStepViewModel());
         PipelineSteps.Add(new ConvertStepViewModel());
         SelectedStep = PipelineSteps[0];
+        _aiInitializationTask = InitializeLocalAiAsync();
     }
 
     public ObservableCollection<QueuedJobViewModel> Jobs { get; } = new();
@@ -111,6 +131,76 @@ public sealed class MainWindowViewModel : ViewModelBase
     public IAsyncRelayCommand SaveRecipeCommand { get; }
 
     public IAsyncRelayCommand LoadRecipeCommand { get; }
+
+    public IAsyncRelayCommand ProbeLocalAiCommand { get; }
+
+    public IAsyncRelayCommand SelectSmartThumbnailCommand { get; }
+
+    public IAsyncRelayCommand SuggestTitleCommand { get; }
+
+    public bool LocalAiEnabled
+    {
+        get => _localAiEnabled;
+        set
+        {
+            if (SetProperty(ref _localAiEnabled, value))
+            {
+                RecordAiSettingsInteraction();
+                if (!_loadingAiSettings)
+                {
+                    _ = SaveLocalAiSettingsAsync();
+                }
+            }
+        }
+    }
+
+    public string LocalAiEndpoint
+    {
+        get => _localAiEndpoint;
+        set
+        {
+            if (SetProperty(ref _localAiEndpoint, value))
+            {
+                RecordAiSettingsInteraction();
+            }
+        }
+    }
+
+    public string LocalAiVisionModel
+    {
+        get => _localAiVisionModel;
+        set
+        {
+            if (SetProperty(ref _localAiVisionModel, value))
+            {
+                RecordAiSettingsInteraction();
+            }
+        }
+    }
+
+    public string LocalAiTextModel
+    {
+        get => _localAiTextModel;
+        set
+        {
+            if (SetProperty(ref _localAiTextModel, value))
+            {
+                RecordAiSettingsInteraction();
+            }
+        }
+    }
+
+    public string LocalAiStatus
+    {
+        get => _localAiStatus;
+        set => SetProperty(ref _localAiStatus, value);
+    }
+
+    public string SuggestedTitle
+    {
+        get => _suggestedTitle;
+        set => SetProperty(ref _suggestedTitle, value);
+    }
 
     public QueuedJobViewModel? SelectedJob
     {
@@ -531,6 +621,166 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
     }
 
+    private async Task InitializeLocalAiAsync()
+    {
+        var initialVersion = _aiSettingsVersion;
+        try
+        {
+            await _videoAiService.InitializeAsync().ConfigureAwait(true);
+            if (_aiSettingsVersion == initialVersion)
+            {
+                var settings = _videoAiService.Settings;
+                _applyingAiSettings = true;
+                try
+                {
+                    LocalAiEnabled = settings.Enabled;
+                    LocalAiEndpoint = settings.Endpoint;
+                    LocalAiVisionModel = settings.VisionModel;
+                    LocalAiTextModel = settings.TextModel;
+                }
+                finally
+                {
+                    _applyingAiSettings = false;
+                }
+            }
+            LocalAiStatus = _videoAiService.Status.Message;
+        }
+        catch (Exception ex)
+        {
+            LocalAiStatus = $"Could not load local-AI settings: {ex.Message}";
+        }
+        finally
+        {
+            _loadingAiSettings = false;
+            if (_aiSettingsVersion != initialVersion)
+            {
+                _ = SaveLocalAiSettingsAsync();
+            }
+        }
+    }
+
+    private async Task SaveLocalAiSettingsAsync()
+    {
+        await _aiInitializationTask.ConfigureAwait(true);
+        await _aiSaveLock.WaitAsync().ConfigureAwait(true);
+        try
+        {
+            await _videoAiService.UpdateSettingsAsync(BuildAiSettings()).ConfigureAwait(true);
+            LocalAiStatus = _videoAiService.Status.Message;
+        }
+        catch (Exception ex)
+        {
+            LocalAiStatus = $"Could not save local-AI settings: {ex.Message}";
+        }
+        finally
+        {
+            _aiSaveLock.Release();
+        }
+    }
+
+    private void RecordAiSettingsInteraction()
+    {
+        if (!_applyingAiSettings)
+        {
+            _aiSettingsVersion++;
+        }
+    }
+
+    private async Task ProbeLocalAiAsync()
+    {
+        await SaveLocalAiSettingsAsync().ConfigureAwait(true);
+        var status = await _videoAiService.ProbeAsync().ConfigureAwait(true);
+        LocalAiStatus = status.Message;
+    }
+
+    private async Task SelectSmartThumbnailAsync()
+    {
+        await SaveLocalAiSettingsAsync().ConfigureAwait(true);
+        LocalAiStatus = (await _videoAiService.ProbeAsync().ConfigureAwait(true)).Message;
+        var sample = await CreateAiSampleAsync().ConfigureAwait(true);
+        if (sample is null)
+        {
+            return;
+        }
+
+        var selection = await _videoAiService.SelectThumbnailAsync(sample.Value.Candidates).ConfigureAwait(true);
+        var selectedPath = sample.Value.Paths.First(pair => pair.Id == selection.Candidate.Id).Path;
+        BeforePreviewUri = new Uri(selectedPath);
+        LocalAiStatus = selection.Message;
+    }
+
+    private async Task SuggestTitleAsync()
+    {
+        await SaveLocalAiSettingsAsync().ConfigureAwait(true);
+        LocalAiStatus = (await _videoAiService.ProbeAsync().ConfigureAwait(true)).Message;
+        var sample = await CreateAiSampleAsync().ConfigureAwait(true);
+        if (sample is null || SelectedJob is null)
+        {
+            return;
+        }
+
+        var info = sample.Value.MediaInfo;
+        var suggestion = await _videoAiService.SuggestTitleAsync(
+            sample.Value.Candidates,
+            new VideoTitleMetadata(
+                SelectedJob.FileName,
+                info.Duration,
+                info.Video?.Width ?? 0,
+                info.Video?.Height ?? 0)).ConfigureAwait(true);
+        SuggestedTitle = suggestion.SafeFileName;
+        LocalAiStatus = suggestion.Message;
+    }
+
+    private async Task<(IReadOnlyList<VideoFrameCandidate> Candidates, IReadOnlyList<(string Id, string Path)> Paths, MediaInfo MediaInfo)?> CreateAiSampleAsync()
+    {
+        var selected = SelectedJob;
+        if (selected is null || !File.Exists(selected.InputPath))
+        {
+            LocalAiStatus = "Select a video before using local AI.";
+            return null;
+        }
+
+        try
+        {
+            var info = await _mediaProbe.ProbeAsync(selected.InputPath).ConfigureAwait(true);
+            var fractions = new[] { 0.25, 0.5, 0.75 };
+            var candidates = new List<VideoFrameCandidate>();
+            var paths = new List<(string Id, string Path)>();
+            for (var index = 0; index < fractions.Length; index++)
+            {
+                var time = TimeSpan.FromSeconds(Math.Max(0, info.Duration.TotalSeconds * fractions[index]));
+                var path = await CreatePreviewFramePathAsync(selected.InputPath, time, null).ConfigureAwait(true);
+                if (path is null)
+                {
+                    continue;
+                }
+
+                var id = $"frame-{index + 1}";
+                candidates.Add(new VideoFrameCandidate(id, await File.ReadAllBytesAsync(path).ConfigureAwait(true)));
+                paths.Add((id, path));
+            }
+
+            if (candidates.Count == 0)
+            {
+                LocalAiStatus = "Could not sample candidate frames from the selected video.";
+                return null;
+            }
+
+            return (candidates, paths, info);
+        }
+        catch (Exception ex)
+        {
+            LocalAiStatus = $"Could not prepare local-AI samples: {ex.Message}";
+            return null;
+        }
+    }
+
+    private VideoAiSettings BuildAiSettings() => new(
+        LocalAiEnabled,
+        LocalAiEndpoint,
+        LocalAiVisionModel,
+        LocalAiTextModel);
+
     private IReadOnlyList<IVideoOperation> BuildOperations() =>
         PipelineSteps.Select(step => step.BuildOperation()).ToArray();
 
@@ -632,6 +882,12 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     private async Task<Uri?> CreatePreviewFrameAsync(string inputPath, TimeSpan time, string? videoFilters)
     {
+        var path = await CreatePreviewFramePathAsync(inputPath, time, videoFilters).ConfigureAwait(true);
+        return path is null ? null : new Uri(path);
+    }
+
+    private async Task<string?> CreatePreviewFramePathAsync(string inputPath, TimeSpan time, string? videoFilters)
+    {
         var outputPath = Path.Combine(Path.GetTempPath(), "reelpress-preview", $"{Guid.NewGuid():N}.jpg");
         var outputDirectory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(outputDirectory))
@@ -664,7 +920,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             return null;
         }
 
-        return new Uri(outputPath);
+        return outputPath;
     }
 
     private static string FormatFfmpegTime(TimeSpan value)
