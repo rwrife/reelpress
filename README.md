@@ -93,15 +93,41 @@ an explicit `.json` path can be used anywhere:
 
 ReelPress works fully in **non-AI mode**. When you opt in, it can talk to a local
 [Ollama](https://ollama.com/) or [llama.cpp](https://github.com/ggerganov/llama.cpp)
-server over the OpenAI-compatible endpoint at `http://localhost:11434` (or your configured host):
+server over a loopback endpoint such as `http://localhost:11434`:
 
 - **Smart thumbnail / poster frame** — pick the most representative or "interesting" frame using a tiny vision model (MiniCPM-V class).
 - **Auto-titles & filenames** — suggest descriptive output names from sampled frames/metadata.
 - **Chapter/scene hints** — lightweight scene-change summaries for long clips.
 
-All AI is **local-only** and metadata/frame-sampled (no upload). ReelPress probes for a running
-server first and **gracefully falls back** to deterministic rules (center frame, token-based naming)
-when none is reachable. Recommended tiny models: MiniCPM-V, Llama 3.2, Qwen2.5, Phi-3-mini.
+All AI is **local-only**, optional, and off by default. The desktop settings panel lets you
+enable it, choose the endpoint and vision/text model names, probe server status, select a
+thumbnail, and suggest a filename. A bare Ollama endpoint (the default,
+`http://localhost:11434`) uses `/api/tags` and `/api/chat`; an endpoint containing `/v1`
+uses OpenAI-compatible `/v1/models` and `/v1/chat/completions` semantics. For a plain
+llama.cpp server, specify its `/v1` base explicitly (for example,
+`http://127.0.0.1:8080/v1`); other route configurations are reported as unreachable.
+
+### Local-AI privacy contract
+
+Only `http` or `https` endpoints whose host is `localhost`, an address in `127.0.0.0/8`,
+or IPv6 `::1` are accepted. Invalid, unsupported-route, and non-loopback endpoints are
+reported as unreachable without any network request.
+
+For a smart thumbnail, ReelPress extracts three JPEG candidate frames at 25%, 50%, and 75%
+of the duration and transmits only those JPEG bytes (base64 encoded), their opaque candidate
+IDs, and the selection prompt to the configured endpoint. For a title, the configured vision
+model first receives the sampled JPEGs and produces a textual scene summary. The configured
+text model then receives only that summary, the source **filename**, duration, dimensions,
+optional recording time, and the title prompt—never image data. The configured model names
+are included in their respective requests.
+**Full video files, audio streams, and file paths are never transmitted.** Requests go only
+to the endpoint the user configures; ReelPress does not contain a cloud endpoint.
+
+When disabled, ReelPress sends no probe or inference request. If the endpoint is unreachable,
+returns an error, or supplies malformed output, thumbnail selection deterministically chooses
+the center candidate and title generation uses a tokenized, filesystem-safe form of the source
+name. Recommended tiny models include MiniCPM-V/Qwen-VL for vision and Llama 3.2, Qwen2.5,
+or Phi-3-mini for text.
 
 ## Current status / milestones
 
@@ -112,7 +138,7 @@ when none is reachable. Recommended tiny models: MiniCPM-V, Llama 3.2, Qwen2.5, 
 - [ ] M3 — Extraction: audio, frames, GIF/animated-WebP export
 - [ ] M4 — Avalonia desktop UI: pipeline builder, batch queue, live preview
 - [x] M5 — `reelpress` CLI + JSON recipes
-- [ ] M6 — Optional local-AI (smart thumbnail / auto-title)
+- [x] M6 — Optional local-AI (smart thumbnail / auto-title)
 - [ ] M7 — Packaging & CI (Windows zip/MSIX, macOS .app/.dmg)
 
 ## License

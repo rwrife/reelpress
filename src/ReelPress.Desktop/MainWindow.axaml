@@ -217,6 +217,36 @@
 
         <Border Padding="10" BorderThickness="1" BorderBrush="#404040" CornerRadius="6">
           <StackPanel Spacing="8">
+            <TextBlock Text="Optional Local AI" FontSize="16" FontWeight="SemiBold" />
+            <CheckBox Content="Enable local AI (off by default)"
+                      IsChecked="{Binding LocalAiEnabled}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Endpoint" Width="120" />
+              <TextBox Width="360" Text="{Binding LocalAiEndpoint}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Vision model" Width="120" />
+              <TextBox Width="170" Text="{Binding LocalAiVisionModel}" />
+              <TextBlock Text="Text model" Width="80" />
+              <TextBox Width="150" Text="{Binding LocalAiTextModel}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Save &amp; Probe" Command="{Binding ProbeLocalAiCommand}" />
+              <Button Content="Smart Thumbnail" Command="{Binding SelectSmartThumbnailCommand}" />
+              <Button Content="Suggest Title" Command="{Binding SuggestTitleCommand}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="Suggested filename" Width="120" />
+              <TextBox Width="360" Text="{Binding SuggestedTitle}" IsReadOnly="True" />
+            </StackPanel>
+            <TextBlock Text="Only sampled JPEG frames and displayed metadata are sent to the configured local endpoint; never the video file."
+                       FontSize="11" TextWrapping="Wrap" Opacity="0.8" />
+            <TextBlock Text="{Binding LocalAiStatus}" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+
+        <Border Padding="10" BorderThickness="1" BorderBrush="#404040" CornerRadius="6">
+          <StackPanel Spacing="8">
             <TextBlock Text="Live Preview + Estimate" FontSize="16" FontWeight="SemiBold" />
             <Grid ColumnDefinitions="*,*">
               <StackPanel Grid.Column="0" Margin="0,0,6,0" Spacing="4">
