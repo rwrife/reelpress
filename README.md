@@ -67,6 +67,28 @@ reelpress gif input.mp4 --start 00:01:05 --end 00:01:08 --fps 15 --width 480 --o
 reelpress audio extract input.mp4 --format mp3 --out track.mp3
 ```
 
+Every command supports `--help`; add `--json` for machine-readable probe or job
+results. Exit codes are stable for scripts: `0` success, `1` processing failure,
+and `2` invalid arguments. Available verbs are `run`, `trim`, `convert`,
+`compress`, `resize`, `merge`, `audio`, `frames`, `gif`, and `probe`.
+
+Recipes are versioned JSON shared by the desktop pipeline builder and CLI. A
+name such as `social` is stored under `%APPDATA%\reelpress\social.json` on
+Windows or `~/Library/Application Support/reelpress/social.json` on macOS;
+an explicit `.json` path can be used anywhere:
+
+```json
+{
+  "version": 1,
+  "name": "social",
+  "operations": [
+    { "type": "resize", "resizePreset": "p720", "resizeMode": "fit", "allowUpscale": false },
+    { "type": "compress", "compressionMode": "qualityCrf", "crf": 24, "audioBitrateKbps": 128, "videoCodec": "h264" },
+    { "type": "convert", "container": "mp4", "videoCodec": "h264", "audioCodec": "aac" }
+  ]
+}
+```
+
 ## Local-AI integration (optional, off by default)
 
 ReelPress works fully in **non-AI mode**. When you opt in, it can talk to a local
@@ -89,7 +111,7 @@ when none is reachable. Recommended tiny models: MiniCPM-V, Llama 3.2, Qwen2.5, 
 - [ ] M2 — Core operations: trim, convert, compress, resize, merge
 - [ ] M3 — Extraction: audio, frames, GIF/animated-WebP export
 - [ ] M4 — Avalonia desktop UI: pipeline builder, batch queue, live preview
-- [ ] M5 — `reelpress` CLI + JSON recipes
+- [x] M5 — `reelpress` CLI + JSON recipes
 - [ ] M6 — Optional local-AI (smart thumbnail / auto-title)
 - [ ] M7 — Packaging & CI (Windows zip/MSIX, macOS .app/.dmg)
 
