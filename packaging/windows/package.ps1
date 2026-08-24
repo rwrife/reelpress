@@ -182,7 +182,7 @@ try {
             $PSNativeCommandUseErrorActionPreference = $PreviousNativeErrorPreference
         }
         if ($VerifyExitCode -ne 0 `
-            -and $VerifyOutput -notmatch "root certificate which is not trusted by the trust provider") {
+            -and $VerifyOutput -notmatch "root\s+certificate\s+which\s+is\s+not\s+trusted\s+by\s+the\s+trust\s+provider") {
             throw "MSIX signature/hash verification failed: $VerifyOutput"
         }
 
