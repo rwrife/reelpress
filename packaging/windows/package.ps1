@@ -185,6 +185,8 @@ try {
             -and $VerifyOutput -notmatch "root\s+certificate\s+which\s+is\s+not\s+trusted\s+by\s+the\s+trust\s+provider") {
             throw "MSIX signature/hash verification failed: $VerifyOutput"
         }
+        # Do not let the accepted trust-chain result become pwsh's process exit.
+        $global:LASTEXITCODE = 0
 
         $Signature = Get-AuthenticodeSignature -FilePath $MsixPath
         if ($null -eq $Signature.SignerCertificate `
