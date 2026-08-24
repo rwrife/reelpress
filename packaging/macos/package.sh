@@ -64,6 +64,17 @@ while IFS= read -r -d '' arm_file; do
   if [[ -f "$x64_file" ]] \
       && file "$x64_file" | grep -q 'Mach-O' \
       && file "$arm_file" | grep -q 'Mach-O'; then
+    x64_arches="$(lipo -archs "$x64_file")"
+    arm64_arches="$(lipo -archs "$arm_file")"
+    if [[ "$x64_arches" == *x86_64* && "$x64_arches" == *arm64* \
+        && "$arm64_arches" == *x86_64* && "$arm64_arches" == *arm64* ]]; then
+      # NuGet native assets can already be universal in both RID publishes.
+      continue
+    fi
+    if [[ "$x64_arches" != *x86_64* || "$arm64_arches" != *arm64* ]]; then
+      echo "Cannot make $relative_path universal: x64=[$x64_arches], arm64=[$arm64_arches]" >&2
+      exit 1
+    fi
     merged_file="$temp_root/merged-$(printf '%s' "$relative_path" | shasum -a 256 | cut -d' ' -f1)"
     lipo -create "$x64_file" "$arm_file" -output "$merged_file"
     chmod +x "$merged_file"
@@ -73,6 +84,18 @@ while IFS= read -r -d '' arm_file; do
     cp -p "$arm_file" "$target_file"
   fi
 done < <(find "$arm64_publish" -type f -print0)
+
+# Every Mach-O produced by the app publish must be universal before adding the
+# intentionally RID-specific FFmpeg binaries below.
+while IFS= read -r -d '' native_file; do
+  if file "$native_file" | grep -q 'Mach-O'; then
+    native_arches="$(lipo -archs "$native_file")"
+    if [[ "$native_arches" != *x86_64* || "$native_arches" != *arm64* ]]; then
+      echo "Non-universal app binary: ${native_file#"$macos_root"/} [$native_arches]" >&2
+      exit 1
+    fi
+  fi
+done < <(find "$macos_root" -type f -print0)
 
 for arch in x64 arm64; do
   runtime_root="$macos_root/runtimes/osx-$arch/native"

@@ -165,9 +165,10 @@ try {
     $CerPath = Join-Path $OutputDirectory "ReelPress-test.cer"
     Export-PfxCertificate -Cert $Certificate -FilePath $PfxPath -Password $Password | Out-Null
     Export-Certificate -Cert $Certificate -FilePath $CerPath -Type CERT | Out-Null
-    # SignTool's /pa policy validates to a trusted root. Import only for this
-    # verification step, then remove it in the finally block.
-    $TrustedCertificate = Import-Certificate -FilePath $CerPath -CertStoreLocation "Cert:\CurrentUser\Root"
+    # SignTool's /pa policy validates to a trusted root. certutil's forced,
+    # current-user import is non-interactive on hosted runners; remove it below.
+    & certutil.exe -user -addstore -f Root $CerPath | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Unable to trust the temporary signing certificate." }
 
     try {
         & $SignTool sign /fd SHA256 /f $PfxPath /p $PasswordText $MsixPath
@@ -176,7 +177,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "MSIX signature verification failed." }
     }
     finally {
-        Remove-Item -Path ("Cert:\CurrentUser\Root\" + $TrustedCertificate.Thumbprint) -Force -ErrorAction SilentlyContinue
+        & certutil.exe -user -delstore Root $Certificate.Thumbprint | Out-Null
         Remove-Item -Path ("Cert:\CurrentUser\My\" + $Certificate.Thumbprint) -Force -ErrorAction SilentlyContinue
     }
 
