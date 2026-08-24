@@ -165,7 +165,9 @@ try {
     $CerPath = Join-Path $OutputDirectory "ReelPress-test.cer"
     Export-PfxCertificate -Cert $Certificate -FilePath $PfxPath -Password $Password | Out-Null
     Export-Certificate -Cert $Certificate -FilePath $CerPath -Type CERT | Out-Null
-    $TrustedCertificate = Import-Certificate -FilePath $CerPath -CertStoreLocation "Cert:\CurrentUser\TrustedPeople"
+    # SignTool's /pa policy validates to a trusted root. Import only for this
+    # verification step, then remove it in the finally block.
+    $TrustedCertificate = Import-Certificate -FilePath $CerPath -CertStoreLocation "Cert:\CurrentUser\Root"
 
     try {
         & $SignTool sign /fd SHA256 /f $PfxPath /p $PasswordText $MsixPath
@@ -174,7 +176,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "MSIX signature verification failed." }
     }
     finally {
-        Remove-Item -Path ("Cert:\CurrentUser\TrustedPeople\" + $TrustedCertificate.Thumbprint) -Force -ErrorAction SilentlyContinue
+        Remove-Item -Path ("Cert:\CurrentUser\Root\" + $TrustedCertificate.Thumbprint) -Force -ErrorAction SilentlyContinue
         Remove-Item -Path ("Cert:\CurrentUser\My\" + $Certificate.Thumbprint) -Force -ErrorAction SilentlyContinue
     }
 
