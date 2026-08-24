@@ -1,6 +1,8 @@
 **/bin/
 **/obj/
 **/.avalonia-build-tasks/
+**/__pycache__/
+artifacts/
 .vs/
 *.user
 *.suo

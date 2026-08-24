@@ -36,7 +36,7 @@ ReelPress wraps the power of FFmpeg in a friendly, batch-first desktop UI that k
 
 ### Windows 10/11 quickstart
 
-1. Download the latest `reelpress-win-x64.zip` from Releases and unzip (portable), or install the MSIX.
+1. Download the latest `reelpress-win-x64.zip` from Releases and unzip (portable), or install the MSIX. Early MSIX builds use the adjacent test certificate; follow the trust/import steps in the [packaging guide](./packaging/README.md#windows-test-certificate).
 2. Launch **ReelPress**. FFmpeg is bundled — nothing else to install.
 3. Drag video files (or a folder) onto the window.
 4. Add operations to the pipeline (e.g. *Resize → 720p*, then *Compress → target 25 MB*).
@@ -131,7 +131,7 @@ or Phi-3-mini for text.
 
 ## Current status / milestones
 
-🚧 **Early scaffolding.** See [PLAN.md](./PLAN.md) for the full roadmap.
+🚧 **Early release.** See [PLAN.md](./PLAN.md) for the full roadmap and the [packaging guide](./packaging/README.md) for native build/release details.
 
 - [ ] M1 — `ReelPress.Core`: FFmpeg engine wrapper, probe, operation model
 - [ ] M2 — Core operations: trim, convert, compress, resize, merge
@@ -139,8 +139,8 @@ or Phi-3-mini for text.
 - [ ] M4 — Avalonia desktop UI: pipeline builder, batch queue, live preview
 - [x] M5 — `reelpress` CLI + JSON recipes
 - [x] M6 — Optional local-AI (smart thumbnail / auto-title)
-- [ ] M7 — Packaging & CI (Windows zip/MSIX, macOS .app/.dmg)
+- [x] M7 — Packaging & CI (Windows zip/MSIX, macOS universal .app/.dmg)
 
 ## License
 
-MIT — see [LICENSE](./LICENSE) once added.
+MIT — see [LICENSE](./LICENSE). Bundled FFmpeg/FFprobe executables are GPLv3; see [third-party notices](./packaging/THIRD-PARTY-NOTICES.md).
