@@ -52,53 +52,38 @@ app_root="$temp_root/ReelPress.app"
 macos_root="$app_root/Contents/MacOS"
 resources_root="$app_root/Contents/Resources"
 mkdir -p "$macos_root" "$resources_root/licenses"
-ditto "$x64_publish" "$macos_root"
+ditto "$x64_publish" "$macos_root/osx-x64"
+ditto "$arm64_publish" "$macos_root/osx-arm64"
 
-# Merge every architecture-specific Mach-O pair from the two self-contained
-# publishes. Managed assemblies and architecture-neutral resources are shared.
-while IFS= read -r -d '' arm_file; do
-  relative_path="${arm_file#"$arm64_publish"/}"
-  x64_file="$x64_publish/$relative_path"
-  target_file="$macos_root/$relative_path"
+# Self-contained .NET assemblies can contain architecture-specific ReadyToRun
+# code, so keep complete RID payloads. A true universal Mach-O launcher selects
+# the matching payload without requiring Rosetta on Apple Silicon.
+clang -Wall -Wextra -Werror \
+  -arch x86_64 -arch arm64 \
+  -mmacosx-version-min=11.0 \
+  "$repo_root/packaging/macos/launcher.c" \
+  -o "$macos_root/ReelPress.Desktop"
 
-  if [[ -f "$x64_file" ]] \
-      && file "$x64_file" | grep -q 'Mach-O' \
-      && file "$arm_file" | grep -q 'Mach-O'; then
-    x64_arches="$(lipo -archs "$x64_file")"
-    arm64_arches="$(lipo -archs "$arm_file")"
-    if [[ "$x64_arches" == *x86_64* && "$x64_arches" == *arm64* \
-        && "$arm64_arches" == *x86_64* && "$arm64_arches" == *arm64* ]]; then
-      # NuGet native assets can already be universal in both RID publishes.
-      continue
+verify_payload_architecture() {
+  local root="$1"
+  local expected_architecture="$2"
+  local native_arches
+  while IFS= read -r -d '' native_file; do
+    if file "$native_file" | grep -q 'Mach-O'; then
+      native_arches="$(lipo -archs "$native_file")"
+      if [[ " $native_arches " != *" $expected_architecture "* ]]; then
+        echo "Wrong architecture in ${native_file#"$macos_root"/}: expected $expected_architecture, found [$native_arches]" >&2
+        exit 1
+      fi
     fi
-    if [[ "$x64_arches" != *x86_64* || "$arm64_arches" != *arm64* ]]; then
-      echo "Cannot make $relative_path universal: x64=[$x64_arches], arm64=[$arm64_arches]" >&2
-      exit 1
-    fi
-    merged_file="$temp_root/merged-$(printf '%s' "$relative_path" | shasum -a 256 | cut -d' ' -f1)"
-    lipo -create "$x64_file" "$arm_file" -output "$merged_file"
-    chmod +x "$merged_file"
-    mv "$merged_file" "$target_file"
-  elif [[ ! -e "$target_file" ]]; then
-    mkdir -p "$(dirname "$target_file")"
-    cp -p "$arm_file" "$target_file"
-  fi
-done < <(find "$arm64_publish" -type f -print0)
+  done < <(find "$root" -type f -print0)
+}
 
-# Every Mach-O produced by the app publish must be universal before adding the
-# intentionally RID-specific FFmpeg binaries below.
-while IFS= read -r -d '' native_file; do
-  if file "$native_file" | grep -q 'Mach-O'; then
-    native_arches="$(lipo -archs "$native_file")"
-    if [[ "$native_arches" != *x86_64* || "$native_arches" != *arm64* ]]; then
-      echo "Non-universal app binary: ${native_file#"$macos_root"/} [$native_arches]" >&2
-      exit 1
-    fi
-  fi
-done < <(find "$macos_root" -type f -print0)
+verify_payload_architecture "$macos_root/osx-x64" x86_64
+verify_payload_architecture "$macos_root/osx-arm64" arm64
 
 for arch in x64 arm64; do
-  runtime_root="$macos_root/runtimes/osx-$arch/native"
+  runtime_root="$macos_root/osx-$arch/runtimes/osx-$arch/native"
   mkdir -p "$runtime_root"
   if [[ "$arch" == "x64" ]]; then
     ffmpeg_sha="ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894"
@@ -128,8 +113,10 @@ main_arches="$(lipo -archs "$macos_root/ReelPress.Desktop")"
   echo "Universal app host verification failed: $main_arches" >&2
   exit 1
 }
-[[ "$(lipo -archs "$macos_root/runtimes/osx-x64/native/ffmpeg")" == *x86_64* ]]
-[[ "$(lipo -archs "$macos_root/runtimes/osx-arm64/native/ffmpeg")" == *arm64* ]]
+[[ " $(lipo -archs "$macos_root/osx-x64/runtimes/osx-x64/native/ffmpeg") " == *" x86_64 "* ]]
+[[ " $(lipo -archs "$macos_root/osx-x64/runtimes/osx-x64/native/ffprobe") " == *" x86_64 "* ]]
+[[ " $(lipo -archs "$macos_root/osx-arm64/runtimes/osx-arm64/native/ffmpeg") " == *" arm64 "* ]]
+[[ " $(lipo -archs "$macos_root/osx-arm64/runtimes/osx-arm64/native/ffprobe") " == *" arm64 "* ]]
 
 codesign --force --deep --sign - "$app_root"
 codesign --verify --deep --strict "$app_root"
@@ -157,11 +144,11 @@ else
 fi
 
 if [[ "$(uname -m)" == "arm64" ]]; then
-  ffmpeg_output="$("$macos_root/runtimes/osx-arm64/native/ffmpeg" -version)"
-  ffprobe_output="$("$macos_root/runtimes/osx-arm64/native/ffprobe" -version)"
+  ffmpeg_output="$("$macos_root/osx-arm64/runtimes/osx-arm64/native/ffmpeg" -version)"
+  ffprobe_output="$("$macos_root/osx-arm64/runtimes/osx-arm64/native/ffprobe" -version)"
 else
-  ffmpeg_output="$("$macos_root/runtimes/osx-x64/native/ffmpeg" -version)"
-  ffprobe_output="$("$macos_root/runtimes/osx-x64/native/ffprobe" -version)"
+  ffmpeg_output="$("$macos_root/osx-x64/runtimes/osx-x64/native/ffmpeg" -version)"
+  ffprobe_output="$("$macos_root/osx-x64/runtimes/osx-x64/native/ffprobe" -version)"
 fi
 printf '%s\n' "${ffmpeg_output%%$'\n'*}"
 printf '%s\n' "${ffprobe_output%%$'\n'*}"

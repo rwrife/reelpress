@@ -165,19 +165,34 @@ try {
     $CerPath = Join-Path $OutputDirectory "ReelPress-test.cer"
     Export-PfxCertificate -Cert $Certificate -FilePath $PfxPath -Password $Password | Out-Null
     Export-Certificate -Cert $Certificate -FilePath $CerPath -Type CERT | Out-Null
-    # SignTool's /pa policy validates to a trusted root. certutil's forced,
-    # current-user import is non-interactive on hosted runners; remove it below.
-    & certutil.exe -user -addstore -f Root $CerPath | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Unable to trust the temporary signing certificate." }
-
     try {
         & $SignTool sign /fd SHA256 /f $PfxPath /p $PasswordText $MsixPath
         if ($LASTEXITCODE -ne 0) { throw "signtool failed." }
-        & $SignTool verify /pa $MsixPath
-        if ($LASTEXITCODE -ne 0) { throw "MSIX signature verification failed." }
+
+        # Signature/hash verification succeeds before SignTool evaluates the
+        # trust chain. The only accepted nonzero result is this expected error
+        # for the intentionally self-signed, untrusted CI certificate.
+        $PreviousNativeErrorPreference = $PSNativeCommandUseErrorActionPreference
+        try {
+            $PSNativeCommandUseErrorActionPreference = $false
+            $VerifyOutput = (& $SignTool verify /pa /v $MsixPath 2>&1) -join [Environment]::NewLine
+            $VerifyExitCode = $LASTEXITCODE
+        }
+        finally {
+            $PSNativeCommandUseErrorActionPreference = $PreviousNativeErrorPreference
+        }
+        if ($VerifyExitCode -ne 0 `
+            -and $VerifyOutput -notmatch "root certificate which is not trusted by the trust provider") {
+            throw "MSIX signature/hash verification failed: $VerifyOutput"
+        }
+
+        $Signature = Get-AuthenticodeSignature -FilePath $MsixPath
+        if ($null -eq $Signature.SignerCertificate `
+            -or $Signature.SignerCertificate.Thumbprint -ne $Certificate.Thumbprint) {
+            throw "MSIX signer certificate verification failed."
+        }
     }
     finally {
-        & certutil.exe -user -delstore Root $Certificate.Thumbprint | Out-Null
         Remove-Item -Path ("Cert:\CurrentUser\My\" + $Certificate.Thumbprint) -Force -ErrorAction SilentlyContinue
     }
 

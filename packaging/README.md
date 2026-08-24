@@ -24,8 +24,10 @@ Both scripts:
    discovers them before consulting `PATH`.
 5. Smoke-test the bundled FFmpeg and FFprobe binaries.
 
-The macOS script publishes `osx-x64` and `osx-arm64`, combines every matching
-Mach-O file with `lipo`, then ad-hoc signs the resulting universal app bundle.
+The macOS script publishes complete `osx-x64` and `osx-arm64` payloads and
+builds a universal Mach-O launcher that selects the native payload, then ad-hoc
+signs the resulting app bundle. Complete payloads are required because the
+self-contained .NET assemblies contain architecture-specific runtime code.
 The desktop project uses Avalonia 11.3.20 because its SkiaSharp/HarfBuzzSharp
 macOS native assets include both x64 and arm64 slices.
 It builds a compressed DMG with an Applications shortcut. Notarization and an
